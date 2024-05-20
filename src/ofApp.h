@@ -49,7 +49,7 @@ void ofApp::setup() {
     lastTime = ofGetElapsedTimef();
     
     // Serial setup
-    std::string serialPort = "/dev/tty.usbmodem21201";  // Update as per your requirements
+    std::string serialPort = "/dev/ttyACM0";  // Update as per your requirements
     serial.setup(serialPort, 9600);
 
     adjustVideoSize = false;  // Set this based on your needs

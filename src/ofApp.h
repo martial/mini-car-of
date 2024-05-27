@@ -82,6 +82,9 @@ void ofApp::update() {
         speed += (targetSpeed - speed) * currSmoothScale * elapsed;
     }
     
+    if (speed > 3.0)
+        speed = 3.0;
+
     videos[currentVideoIndex].update();
     videos[currentVideoIndex].setSpeed(speed);
 
@@ -93,7 +96,7 @@ void ofApp::update() {
 
     // Save config every 5 seconds
     if (currentTime - lastSaveTime >= 5.0f) {
-        saveConfig();
+       // saveConfig();
         lastSaveTime = currentTime;
     }
 }

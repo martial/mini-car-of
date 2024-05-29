@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ofMain.h"
+#include "ofxGui.h"
 #include "ofJson.h"
 
 enum VideoMode {
@@ -40,6 +41,13 @@ public:
     float speedScale;
     float smoothScale;
     std::string usbAddress;
+
+    ofxPanel gui;
+    ofParameter<float> guiSpeedScale;
+    ofParameter<float> guiSmoothScale;
+    ofParameter<string> guiUsbAddress;
+    ofParameter<int> guiVideoMode;
+    bool guiVisible;
 };
 
 void ofApp::setup() {
@@ -65,6 +73,14 @@ void ofApp::setup() {
 
     // Serial setup
     serial.setup(usbAddress, 9600);
+
+    // GUI setup
+    gui.setup();
+    gui.add(guiSpeedScale.set("Speed Scale", speedScale, 0.0, 3.0));
+    gui.add(guiSmoothScale.set("Smooth Scale", smoothScale, 0.0, 1.0));
+    gui.add(guiUsbAddress.set("USB Address", usbAddress));
+    gui.add(guiVideoMode.set("Video Mode", videoMode, 0, 2));
+    guiVisible = false;
 }
 
 void ofApp::update() {
@@ -73,15 +89,13 @@ void ofApp::update() {
     lastTime = currentTime;
 
     // Smoothly adjust speed
-    
     float currSmoothScale = smoothScale;
-    if(speed < 0.25) {
+    if (speed < 0.25) {
         speed = targetSpeed;
-
     } else {
         speed += (targetSpeed - speed) * currSmoothScale * elapsed;
     }
-    
+
     if (speed > 3.0)
         speed = 3.0;
 
@@ -96,9 +110,15 @@ void ofApp::update() {
 
     // Save config every 5 seconds
     if (currentTime - lastSaveTime >= 5.0f) {
-       // saveConfig();
+        saveConfig();
         lastSaveTime = currentTime;
     }
+
+    // Update variables from GUI
+    speedScale = guiSpeedScale;
+    smoothScale = guiSmoothScale;
+    usbAddress = guiUsbAddress;
+    videoMode = static_cast<VideoMode>(guiVideoMode.get());
 }
 
 void ofApp::draw() {
@@ -131,13 +151,19 @@ void ofApp::draw() {
         videos[currentVideoIndex].draw(x, y, videoWidth, videoHeight);
     }
 
-    ofDrawBitmapStringHighlight("Speed: " + ofToString(speed), 10, 20);
+    //ofDrawBitmapStringHighlight("Speed: " + ofToString(speed), 10, 20);
+
+    if (guiVisible) {
+        gui.draw();
+    }
 }
 
 void ofApp::keyPressed(int key) {
     if (key == OF_KEY_ESC) {
         saveConfig();
         ofExit();
+    } else if (key == 'g' || key == 'G') {
+        guiVisible = !guiVisible;
     }
 }
 
@@ -153,9 +179,9 @@ void ofApp::processByte(uint8_t byte) {
     } else if (byte >= 7) {
         computeSpeed(byte - 7);
     }
-    
+
     int newIndex = (country ? 2 : 0) + (night ? 1 : 0);
-    
+
     if (newIndex != currentVideoIndex) {
         currentVideoIndex = newIndex;
     }

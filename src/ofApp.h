@@ -82,7 +82,7 @@ void ofApp::setup() {
         
     }
     videos[currentVideoIndex].play();
-    //sounds[currentVideoIndex].play();
+    sounds[currentVideoIndex].play();
 
     videos[currentVideoIndex].setSpeed(0.0);
     sounds[currentVideoIndex].setSpeed(0.0);
@@ -227,10 +227,10 @@ void ofApp::keyPressed(int key) {
         ofToggleFullscreen();
         isFullScreen = !isFullScreen;
         if (isFullScreen) {
-            ofShowCursor();
+            ofHideCursor();
         }
         else {
-            ofHideCursor();
+            ofShowCursor();
         }
     }
 }

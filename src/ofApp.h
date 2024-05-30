@@ -53,10 +53,14 @@ public:
     ofParameter<float> guiSmoothScale;
     ofParameter<string> guiUsbAddress;
     ofParameter<int> guiVideoMode;
+    ofParameter<bool> guiInvert;
+
     bool guiVisible;
 
     bool isFullScreen = true;
+    bool invert = true;
     
+    std::string previousUsbAddress;
 };
 
 void ofApp::setup() {
@@ -99,8 +103,11 @@ void ofApp::setup() {
     gui.add(guiSmoothScale.set("Inertia", smoothScale, 0.0, 0.99));
     gui.add(guiUsbAddress.set("USB Address", usbAddress));
     gui.add(guiVideoMode.set("Video Mode", videoMode, 0, 2));
-    guiVisible = false;
+    gui.add(guiInvert.set("Invert", invert, 0, 1));
+
     
+    guiVisible = false;
+    previousUsbAddress = usbAddress;
     
 }
 
@@ -147,6 +154,12 @@ void ofApp::update() {
     smoothScale = guiSmoothScale;
     usbAddress = guiUsbAddress;
     videoMode = static_cast<VideoMode>(guiVideoMode.get());
+    invert = guiInvert;
+    
+    if (usbAddress != previousUsbAddress) {
+        serial.setup(usbAddress, 9600);
+        previousUsbAddress = usbAddress;
+    }
 }
 
 void ofApp::draw() {
@@ -190,7 +203,8 @@ void ofApp::draw() {
         ofDrawBitmapStringHighlight("Video Size: " + ofToString(videos[currentVideoIndex].getWidth()) + "x" + ofToString(videos[currentVideoIndex].getHeight()), 225, 80);
 
         ofDrawBitmapStringHighlight("Switches: A:" + ofToString(night) + " B:" + ofToString(country), 225, 100);
-        ofDrawBitmapStringHighlight("Speed: " + ofToString(speed, 2, 5, '0'), 225, 120);
+        ofDrawBitmapStringHighlight("Speed: " + ofToString(speed), 225, 120);
+
         //ofDrawBitmapStringHighlight("speedByte: " + ofToString(speedByte), 10, 20);
 
     }
@@ -222,7 +236,13 @@ void ofApp::keyPressed(int key) {
 }
 
 void ofApp::computeSpeed(uint8_t byte) {
-    targetSpeed = ofMap(byte, 0, 255, 0.0f, 1.8f * speedScale, true);
+    
+    if(!invert) {
+        targetSpeed = ofMap(byte, 0, 255, 0.0f, 1.8f * speedScale, true);
+    } else {
+        targetSpeed = ofMap(byte, 240, 0.0, 0.0f, 1.8f * speedScale, true);
+
+    }
 }
 
 void ofApp::processByte(uint8_t byte) {
@@ -277,6 +297,9 @@ void ofApp::loadConfig() {
 
     // Read USB address
     usbAddress = config["usbAddress"];
+    
+    invert = config["invert"];
+
 
     // Read current settings
     night = config["nightMode"];
@@ -318,6 +341,7 @@ void ofApp::saveConfig() {
 
     // Save USB address
     config["usbAddress"] = usbAddress;
+    config["invert"] = invert;
 
     // Save current settings
     config["nightMode"] = night;

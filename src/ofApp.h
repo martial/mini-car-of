@@ -190,8 +190,7 @@ void ofApp::draw() {
         ofDrawBitmapStringHighlight("Video Size: " + ofToString(videos[currentVideoIndex].getWidth()) + "x" + ofToString(videos[currentVideoIndex].getHeight()), 225, 80);
 
         ofDrawBitmapStringHighlight("Switches: A:" + ofToString(night) + " B:" + ofToString(country), 225, 100);
-        ofDrawBitmapStringHighlight("Speed: " + ofToString(speed), 225, 120);
-
+        ofDrawBitmapStringHighlight("Speed: " + ofToString(speed, 2, 5, '0'), 225, 120);
         //ofDrawBitmapStringHighlight("speedByte: " + ofToString(speedByte), 10, 20);
 
     }

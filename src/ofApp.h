@@ -53,9 +53,12 @@ public:
     ofParameter<float> guiSmoothScale;
     ofParameter<string> guiUsbAddress;
     ofParameter<int> guiVideoMode;
+    ofParameter<bool> guiInvert;
+
     bool guiVisible;
 
     bool isFullScreen = true;
+    bool invert;
     
 };
 
@@ -94,6 +97,8 @@ void ofApp::setup() {
     gui.add(guiSmoothScale.set("Inertia", smoothScale, 0.0, 0.99));
     gui.add(guiUsbAddress.set("USB Address", usbAddress));
     gui.add(guiVideoMode.set("Video Mode", videoMode, 0, 2));
+    gui.add(guiInvert.set("Invert", invert, 0, 1));
+
     guiVisible = false;
     
     
@@ -106,11 +111,9 @@ void ofApp::update() {
 
     // Smoothly adjust speed
     float currSmoothScale = smoothScale;
-    
-
-    
     speed += (targetSpeed - speed) * ofMap((1.0 - currSmoothScale), 0.0, 1.0, 0.0, 0.25);
-
+    
+    
     if (speed > 3.0)
         speed = 3.0;
 
@@ -138,6 +141,7 @@ void ofApp::update() {
     speedScale = guiSpeedScale;
     smoothScale = guiSmoothScale;
     usbAddress = guiUsbAddress;
+    invert = guiInvert;
     videoMode = static_cast<VideoMode>(guiVideoMode.get());
 }
 
@@ -213,7 +217,13 @@ void ofApp::keyPressed(int key) {
 }
 
 void ofApp::computeSpeed(uint8_t byte) {
-    targetSpeed = ofMap(byte, 0, 255, 0.0f, 1.8f * speedScale, true);
+    if(invert) {
+        targetSpeed = ofMap(byte,255, 0, 0.0f, 1.8f * speedScale, true);
+
+    } else {
+        targetSpeed = ofMap(byte, 0, 255, 0.0f, 1.8f * speedScale, true);
+
+    }
 }
 
 void ofApp::processByte(uint8_t byte) {
@@ -268,6 +278,8 @@ void ofApp::loadConfig() {
 
     // Read USB address
     usbAddress = config["usbAddress"];
+    
+    invert = config["invert"];
 
     // Read current settings
     night = config["nightMode"];
@@ -309,7 +321,10 @@ void ofApp::saveConfig() {
 
     // Save USB address
     config["usbAddress"] = usbAddress;
+    
+    config["invert"] = invert;
 
+    
     // Save current settings
     config["nightMode"] = night;
     config["countryMode"] = country;

@@ -1,1 +1,1 @@
-{"countryMode":false,"nightMode":true,"smoothScale":0.9750000238418579,"soundFiles":["B2.wav","A2.wav","B1.wav","A1.wav"],"speedScale":2.7750000953674316,"usbAddress":"/dev/tty.usbmodem11301","videoFiles":["B2.mp4","A2.mp4","B1.mp4","A1.mp4"],"videoMode":"fitScreen"}
+{"countryMode":true,"nightMode":false,"smoothScale":0.77715003490448,"soundFiles":["B2.wav","A2.wav","B1.wav","A1.wav"],"speedScale":2.7750000953674316,"usbAddress":"COM3","videoFiles":["B2.mp4","A2.mp4","B1.mp4","A1.mp4"],"videoMode":"fillScreen"}

@@ -77,9 +77,14 @@ void ofApp::setup() {
         sounds[i].stop();
         
     }
+    videos[currentVideoIndex].play();
+    //sounds[currentVideoIndex].play();
+
+    videos[currentVideoIndex].setSpeed(0.0);
+    sounds[currentVideoIndex].setSpeed(0.0);
 
     speed = 0.0f;
-    targetSpeed = 0.0f;
+    targetSpeed = 1.0f;
     currentVideoIndex = 0;
     simulatedTime = 0;
     lastTime = ofGetElapsedTimef();
@@ -111,13 +116,16 @@ void ofApp::update() {
     
     speed += (targetSpeed - speed) * ofMap((1.0 - currSmoothScale), 0.0, 1.0, 0.0, 0.25);
 
-    if (speed > 3.0)
-        speed = 3.0;
+    float currSpeed = speed;
+    if (currSpeed > 3.0)
+        currSpeed = 3.0;
+
+   if (currSpeed <0.05)
+      currSpeed = 0.0;
 
     videos[currentVideoIndex].update();
-    videos[currentVideoIndex].setSpeed(speed);
-    
-    sounds[currentVideoIndex].setSpeed(speed);
+    videos[currentVideoIndex].setSpeed(currSpeed);
+    sounds[currentVideoIndex].setSpeed(currSpeed);
     
     //sound.update();
     //sound.setSpeed(speed);
@@ -182,6 +190,8 @@ void ofApp::draw() {
         ofDrawBitmapStringHighlight("Video Size: " + ofToString(videos[currentVideoIndex].getWidth()) + "x" + ofToString(videos[currentVideoIndex].getHeight()), 225, 80);
 
         ofDrawBitmapStringHighlight("Switches: A:" + ofToString(night) + " B:" + ofToString(country), 225, 100);
+        ofDrawBitmapStringHighlight("Speed: " + ofToString(speed), 225, 120);
+
         //ofDrawBitmapStringHighlight("speedByte: " + ofToString(speedByte), 10, 20);
 
     }

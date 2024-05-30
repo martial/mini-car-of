@@ -4,3 +4,4 @@ env/*
 .vs/*
 obj/*
 *.pdb
+bin/mini-car-of_boxed.exe

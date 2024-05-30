@@ -48,12 +48,15 @@ public:
     ofParameter<string> guiUsbAddress;
     ofParameter<int> guiVideoMode;
     bool guiVisible;
+
+    bool isFullScreen = true;
 };
 
 void ofApp::setup() {
     ofSetFullscreen(true);
     ofSetFrameRate(60);
     ofBackground(0, 0, 0);
+    ofHideCursor();
 
     loadConfig();
 
@@ -164,6 +167,22 @@ void ofApp::keyPressed(int key) {
         ofExit();
     } else if (key == 'g' || key == 'G') {
         guiVisible = !guiVisible;
+        if (guiVisible) {
+            ofShowCursor();
+        }
+        else {
+            ofHideCursor();
+        }
+    }
+    else if (key == 'f' || key == 'F') {
+        ofToggleFullscreen();
+        isFullScreen = !isFullScreen;
+        if (isFullScreen) {
+            ofShowCursor();
+        }
+        else {
+            ofHideCursor();
+        }
     }
 }
 
@@ -178,6 +197,7 @@ void ofApp::processByte(uint8_t byte) {
         country = (byte == 6);
     } else if (byte >= 7) {
         computeSpeed(byte - 7);
+        ofLogNotice("byte ") << byte;
     }
 
     int newIndex = (country ? 2 : 0) + (night ? 1 : 0);

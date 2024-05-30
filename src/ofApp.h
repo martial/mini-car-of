@@ -53,12 +53,9 @@ public:
     ofParameter<float> guiSmoothScale;
     ofParameter<string> guiUsbAddress;
     ofParameter<int> guiVideoMode;
-    ofParameter<bool> guiInvert;
-
     bool guiVisible;
 
     bool isFullScreen = true;
-    bool invert;
     
 };
 
@@ -80,9 +77,14 @@ void ofApp::setup() {
         sounds[i].stop();
         
     }
+    videos[currentVideoIndex].play();
+    //sounds[currentVideoIndex].play();
+
+    videos[currentVideoIndex].setSpeed(0.0);
+    sounds[currentVideoIndex].setSpeed(0.0);
 
     speed = 0.0f;
-    targetSpeed = 0.0f;
+    targetSpeed = 1.0f;
     currentVideoIndex = 0;
     simulatedTime = 0;
     lastTime = ofGetElapsedTimef();
@@ -97,8 +99,6 @@ void ofApp::setup() {
     gui.add(guiSmoothScale.set("Inertia", smoothScale, 0.0, 0.99));
     gui.add(guiUsbAddress.set("USB Address", usbAddress));
     gui.add(guiVideoMode.set("Video Mode", videoMode, 0, 2));
-    gui.add(guiInvert.set("Invert", invert, 0, 1));
-
     guiVisible = false;
     
     
@@ -111,16 +111,21 @@ void ofApp::update() {
 
     // Smoothly adjust speed
     float currSmoothScale = smoothScale;
+    
+
+    
     speed += (targetSpeed - speed) * ofMap((1.0 - currSmoothScale), 0.0, 1.0, 0.0, 0.25);
-    
-    
-    if (speed > 3.0)
-        speed = 3.0;
+
+    float currSpeed = speed;
+    if (currSpeed > 3.0)
+        currSpeed = 3.0;
+
+   if (currSpeed <0.05)
+      currSpeed = 0.0;
 
     videos[currentVideoIndex].update();
-    videos[currentVideoIndex].setSpeed(speed);
-    
-    sounds[currentVideoIndex].setSpeed(speed);
+    videos[currentVideoIndex].setSpeed(currSpeed);
+    sounds[currentVideoIndex].setSpeed(currSpeed);
     
     //sound.update();
     //sound.setSpeed(speed);
@@ -141,7 +146,6 @@ void ofApp::update() {
     speedScale = guiSpeedScale;
     smoothScale = guiSmoothScale;
     usbAddress = guiUsbAddress;
-    invert = guiInvert;
     videoMode = static_cast<VideoMode>(guiVideoMode.get());
 }
 
@@ -186,6 +190,8 @@ void ofApp::draw() {
         ofDrawBitmapStringHighlight("Video Size: " + ofToString(videos[currentVideoIndex].getWidth()) + "x" + ofToString(videos[currentVideoIndex].getHeight()), 225, 80);
 
         ofDrawBitmapStringHighlight("Switches: A:" + ofToString(night) + " B:" + ofToString(country), 225, 100);
+        ofDrawBitmapStringHighlight("Speed: " + ofToString(speed), 225, 120);
+
         //ofDrawBitmapStringHighlight("speedByte: " + ofToString(speedByte), 10, 20);
 
     }
@@ -217,13 +223,7 @@ void ofApp::keyPressed(int key) {
 }
 
 void ofApp::computeSpeed(uint8_t byte) {
-    if(invert) {
-        targetSpeed = ofMap(byte,255, 0, 0.0f, 1.8f * speedScale, true);
-
-    } else {
-        targetSpeed = ofMap(byte, 0, 255, 0.0f, 1.8f * speedScale, true);
-
-    }
+    targetSpeed = ofMap(byte, 0, 255, 0.0f, 1.8f * speedScale, true);
 }
 
 void ofApp::processByte(uint8_t byte) {
@@ -278,8 +278,6 @@ void ofApp::loadConfig() {
 
     // Read USB address
     usbAddress = config["usbAddress"];
-    
-    invert = config["invert"];
 
     // Read current settings
     night = config["nightMode"];
@@ -321,10 +319,7 @@ void ofApp::saveConfig() {
 
     // Save USB address
     config["usbAddress"] = usbAddress;
-    
-    config["invert"] = invert;
 
-    
     // Save current settings
     config["nightMode"] = night;
     config["countryMode"] = country;

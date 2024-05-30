@@ -25,12 +25,18 @@ public:
 
     ofVideoPlayer videos[4];
     std::string videoFiles[4];
+    
+    ofSoundPlayer sounds[4];;
+    std::string soundFiles[4];
 
+    
     bool night;
     bool country;
     float speed;
     float targetSpeed;  // for smooth speed adjustment
     int currentVideoIndex;
+    
+    int speedByte;
 
     ofSerial serial;
     float simulatedTime;
@@ -50,6 +56,7 @@ public:
     bool guiVisible;
 
     bool isFullScreen = true;
+    
 };
 
 void ofApp::setup() {
@@ -64,7 +71,11 @@ void ofApp::setup() {
     for (int i = 0; i < 4; ++i) {
         videos[i].load(videoFiles[i]);
         videos[i].setLoopState(OF_LOOP_NORMAL);
-        videos[i].play();
+        
+        sounds[i].load(soundFiles[i]);
+        sounds[i].setLoop(true);
+        sounds[i].stop();
+        
     }
 
     speed = 0.0f;
@@ -80,10 +91,12 @@ void ofApp::setup() {
     // GUI setup
     gui.setup();
     gui.add(guiSpeedScale.set("Speed Scale", speedScale, 0.0, 3.0));
-    gui.add(guiSmoothScale.set("Smooth Scale", smoothScale, 0.0, 1.0));
+    gui.add(guiSmoothScale.set("Inertia", smoothScale, 0.0, 0.99));
     gui.add(guiUsbAddress.set("USB Address", usbAddress));
     gui.add(guiVideoMode.set("Video Mode", videoMode, 0, 2));
     guiVisible = false;
+    
+    
 }
 
 void ofApp::update() {
@@ -93,17 +106,21 @@ void ofApp::update() {
 
     // Smoothly adjust speed
     float currSmoothScale = smoothScale;
-    if (speed < 0.25) {
-        speed = targetSpeed;
-    } else {
-        speed += (targetSpeed - speed) * currSmoothScale * elapsed;
-    }
+    
+
+    
+    speed += (targetSpeed - speed) * ofMap((1.0 - currSmoothScale), 0.0, 1.0, 0.0, 0.25);
 
     if (speed > 3.0)
         speed = 3.0;
 
     videos[currentVideoIndex].update();
     videos[currentVideoIndex].setSpeed(speed);
+    
+    sounds[currentVideoIndex].setSpeed(speed);
+    
+    //sound.update();
+    //sound.setSpeed(speed);
 
     if (serial.available() > 0) {
         uint8_t byte;
@@ -158,6 +175,15 @@ void ofApp::draw() {
 
     if (guiVisible) {
         gui.draw();
+        ofDrawBitmapStringHighlight("Potentiometer: " + ofToString(speedByte), 225, 20);
+        ofDrawBitmapStringHighlight("FPS: " + ofToString(ceil(ofGetFrameRate())), 225, 40);
+       // ofDrawBitmapStringHighlight("Video Index: " + ofToString(currentVideoIndex), 225, 60);
+        ofDrawBitmapStringHighlight("Video URL: " + ofToString(videoFiles[currentVideoIndex]), 225, 60);
+        ofDrawBitmapStringHighlight("Video Size: " + ofToString(videos[currentVideoIndex].getWidth()) + "x" + ofToString(videos[currentVideoIndex].getHeight()), 225, 80);
+
+        ofDrawBitmapStringHighlight("Switches: A:" + ofToString(night) + " B:" + ofToString(country), 225, 100);
+        //ofDrawBitmapStringHighlight("speedByte: " + ofToString(speedByte), 10, 20);
+
     }
 }
 
@@ -192,18 +218,29 @@ void ofApp::computeSpeed(uint8_t byte) {
 
 void ofApp::processByte(uint8_t byte) {
     if (byte == 3 || byte == 4) {
-        night = (byte == 4);
+        country = (byte == 4);
     } else if (byte == 5 || byte == 6) {
-        country = (byte == 6);
+        night = (byte == 6);
     } else if (byte >= 7) {
         computeSpeed(byte - 7);
-        ofLogNotice("byte ") << byte;
+        speedByte = byte - 7;
     }
 
     int newIndex = (country ? 2 : 0) + (night ? 1 : 0);
 
     if (newIndex != currentVideoIndex) {
         currentVideoIndex = newIndex;
+        
+        for (int i = 0; i < 4; ++i) {
+            videos[i].stop();
+            sounds[i].stop();
+            
+            videos[i].setPosition(0.0);
+            sounds[i].setPosition(0.0);
+        }
+        
+        videos[currentVideoIndex].play();
+        sounds[currentVideoIndex].play();
     }
 }
 
@@ -213,6 +250,10 @@ void ofApp::loadConfig() {
     // Read video file URLs
     for (int i = 0; i < 4; ++i) {
         videoFiles[i] = config["videoFiles"][i];
+    }
+    
+    for (int i = 0; i < 4; ++i) {
+        soundFiles[i] = config["soundFiles"][i];
     }
 
     // Read video mode
@@ -239,6 +280,10 @@ void ofApp::saveConfig() {
     // Save video file URLs
     for (int i = 0; i < 4; ++i) {
         config["videoFiles"][i] = videoFiles[i];
+    }
+    
+    for (int i = 0; i < 4; ++i) {
+        config["soundFiles"][i] = soundFiles[i];
     }
 
     // Save video mode

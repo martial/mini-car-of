@@ -106,6 +106,7 @@ void ofApp::update() {
         uint8_t byte;
         serial.readBytes(&byte, 1);
         processByte(byte);
+        
     }
 
     // Save config every 5 seconds
@@ -178,6 +179,9 @@ void ofApp::processByte(uint8_t byte) {
         country = (byte == 6);
     } else if (byte >= 7) {
         computeSpeed(byte - 7);
+        //ofLogNotice("byte Total ") << byte;
+
+        ofLogNotice("byte ") << byte-7;
     }
 
     int newIndex = (country ? 2 : 0) + (night ? 1 : 0);

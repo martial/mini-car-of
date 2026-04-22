@@ -105,7 +105,12 @@ OF_ROOT = ../../..
 #
 #   Note: Leave a leading space when adding list items with the += operator
 ################################################################################
-# PROJECT_CFLAGS = 
+# PROJECT_CFLAGS =
+
+# Media Foundation's setSpeed silently rejects fractional H264 rates;
+# DirectShow with K-Lite codecs handles variable-rate H264 reliably.
+# PROJECT_CFLAGS = -UOF_VIDEO_PLAYER_DIRECTSHOW -DOF_VIDEO_PLAYER_MEDIA_FOUNDATION
+# PROJECT_LDFLAGS = -lmf -lmfplat -lmfreadwrite -lmfuuid -lstrmiids -lole32 -loleaut32 -luuid
 
 ################################################################################
 # PROJECT OPTIMIZATION CFLAGS

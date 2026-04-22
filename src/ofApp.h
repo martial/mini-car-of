@@ -21,6 +21,7 @@ public:
     void processByte(uint8_t byte);
     void loadConfig();
     void saveConfig();
+    void openSerial();
     VideoMode stringToVideoMode(const std::string& modeStr);
 
     ofVideoPlayer videos[4];
@@ -39,9 +40,19 @@ public:
     int speedByte;
 
     ofSerial serial;
+    bool serialOk = false;
+    std::string serialStatus = "serial: not initialized";
     float simulatedTime;
     float lastTime;
     float lastSaveTime; // for periodic saving
+    float lastAppliedSpeed = -1.0f;
+    float lastSetSpeedTime = 0.0f; // rate-limit setSpeed calls; DirectShow stalls on rapid changes
+    bool pendingSetSpeed = false;
+
+    // simulated-serial input (keyboard + GUI slider, bypasses real serial)
+    int simSpeedByte = 128;
+    int lastSimByte = -1;
+    bool simMode = false;
 
     VideoMode videoMode;
     float speedScale;
@@ -54,6 +65,8 @@ public:
     ofParameter<string> guiUsbAddress;
     ofParameter<int> guiVideoMode;
     ofParameter<bool> guiInvert;
+    ofParameter<bool> guiSimMode;
+    ofParameter<int> guiSimByte;
 
     bool guiVisible;
 
@@ -84,10 +97,10 @@ void ofApp::setup() {
     videos[currentVideoIndex].play();
     sounds[currentVideoIndex].play();
 
-    videos[currentVideoIndex].setSpeed(0.0);
-    sounds[currentVideoIndex].setSpeed(0.0);
-
-    speed = 0.0f;
+    // Don't setSpeed(0.0) at startup — some DirectShow filters (e.g. MJPEG)
+    // treat put_Rate(0) as a stop they can't recover from. Let play() start
+    // at rate 1.0 naturally; the inertia lerp will take over next frame.
+    speed = 1.0f;
     targetSpeed = 1.0f;
     currentVideoIndex = 0;
     simulatedTime = 0;
@@ -95,7 +108,7 @@ void ofApp::setup() {
     lastSaveTime = ofGetElapsedTimef();
 
     // Serial setup
-    serial.setup(usbAddress, 9600);
+    openSerial();
 
     // GUI setup
     gui.setup();
@@ -104,6 +117,8 @@ void ofApp::setup() {
     gui.add(guiUsbAddress.set("USB Address", usbAddress));
     gui.add(guiVideoMode.set("Video Mode", videoMode, 0, 2));
     gui.add(guiInvert.set("Invert", invert, 0, 1));
+    gui.add(guiSimMode.set("Sim Mode", false));
+    gui.add(guiSimByte.set("Sim Byte", 128, 0, 248));
 
     
     guiVisible = false;
@@ -132,12 +147,20 @@ void ofApp::update() {
 
     videos[currentVideoIndex].update();
     videos[currentVideoIndex].setSpeed(currSpeed);
-    sounds[currentVideoIndex].setSpeed(currSpeed);
+    // sounds[currentVideoIndex].setSpeed(currSpeed);  // temporarily disabled to rule out empty-sound interference
     
     //sound.update();
     //sound.setSpeed(speed);
 
-    if (serial.available() > 0) {
+    simMode = guiSimMode;
+    if (simMode) {
+        int b = guiSimByte;
+        if (b != lastSimByte) {
+            processByte((uint8_t)(b + 7));
+            simSpeedByte = b;
+            lastSimByte = b;
+        }
+    } else if (serialOk && serial.available() > 0) {
         uint8_t byte;
         serial.readBytes(&byte, 1);
         processByte(byte);
@@ -157,7 +180,7 @@ void ofApp::update() {
     invert = guiInvert;
     
     if (usbAddress != previousUsbAddress) {
-        serial.setup(usbAddress, 9600);
+        openSerial();
         previousUsbAddress = usbAddress;
     }
 }
@@ -203,7 +226,13 @@ void ofApp::draw() {
         ofDrawBitmapStringHighlight("Video Size: " + ofToString(videos[currentVideoIndex].getWidth()) + "x" + ofToString(videos[currentVideoIndex].getHeight()), 225, 80);
 
         ofDrawBitmapStringHighlight("Switches: A:" + ofToString(night) + " B:" + ofToString(country), 225, 100);
-        ofDrawBitmapStringHighlight("Speed: " + ofToString(speed), 225, 120);
+        ofDrawBitmapStringHighlight("Speed: " + ofToString(speed, 3) + "  target: " + ofToString(targetSpeed, 3) + "  simByte: " + ofToString((int)guiSimByte) + "  simMode: " + ofToString((bool)guiSimMode), 225, 120);
+
+        ofColor serialColor = serialOk ? ofColor(0, 200, 0) : ofColor(220, 0, 0);
+        ofDrawBitmapStringHighlight(serialStatus, 225, 140, serialColor, ofColor::white);
+        if (simMode) {
+            ofDrawBitmapStringHighlight("SIM MODE (keys: up/down, left/right, pgup/pgdn, 0/9)", 225, 160, ofColor(200, 180, 0), ofColor::black);
+        }
 
         //ofDrawBitmapStringHighlight("speedByte: " + ofToString(speedByte), 10, 20);
 
@@ -233,10 +262,39 @@ void ofApp::keyPressed(int key) {
             ofShowCursor();
         }
     }
+    else if (simMode) {
+        // Sim-mode input: fabricate the same bytes the firmware would send
+        // so processByte() — the real decode path — stays exercised.
+        if (key == OF_KEY_UP || key == OF_KEY_DOWN) {
+            int step = (key == OF_KEY_UP) ? 8 : -8;
+            simSpeedByte = ofClamp(simSpeedByte + step, 0, 248);
+            guiSimByte = simSpeedByte;
+            processByte((uint8_t)(simSpeedByte + 7));
+            lastSimByte = simSpeedByte;
+        } else if (key == OF_KEY_LEFT) {
+            processByte(3); // country off
+        } else if (key == OF_KEY_RIGHT) {
+            processByte(4); // country on
+        } else if (key == OF_KEY_PAGE_UP) {
+            processByte(5); // night off
+        } else if (key == OF_KEY_PAGE_DOWN) {
+            processByte(6); // night on
+        } else if (key == '0') {
+            simSpeedByte = 0;
+            guiSimByte = 0;
+            processByte(7);
+            lastSimByte = 0;
+        } else if (key == '9') {
+            simSpeedByte = 248;
+            guiSimByte = 248;
+            processByte((uint8_t)(248 + 7));
+            lastSimByte = 248;
+        }
+    }
 }
 
 void ofApp::computeSpeed(uint8_t byte) {
-    
+
     if(!invert) {
         targetSpeed = ofMap(byte, 0, 255, 0.0f, 1.8f * speedScale, true);
     } else {
@@ -354,4 +412,15 @@ VideoMode ofApp::stringToVideoMode(const std::string& modeStr) {
     if (modeStr == "fitScreen") return FIT_SCREEN;
     if (modeStr == "fillScreen") return FILL_SCREEN;
     return ORIGINAL;
+}
+
+void ofApp::openSerial() {
+    serial.close();
+    serialOk = serial.setup(usbAddress, 9600);
+    if (serialOk) {
+        serialStatus = "serial OK: " + usbAddress;
+    } else {
+        serialStatus = "serial ERROR: could not open " + usbAddress;
+    }
+    ofLogNotice("openSerial") << serialStatus;
 }

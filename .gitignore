@@ -1,7 +1,12 @@
 env/*
 *.mp4
 *.mov
+*.avi
 .vs/*
 obj/*
 *.pdb
 bin/mini-car-of_boxed.exe
+dist/mini-car-of/
+dist/mini-car-of.zip
+dist/MINI CAR/
+dist/MINI CAR.zip

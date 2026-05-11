@@ -10,3 +10,12 @@ dist/mini-car-of/
 dist/mini-car-of.zip
 dist/MINI CAR/
 dist/MINI CAR.zip
+
+# runtime config artifacts produced by the durable-save logic
+bin/data/config.json.bak
+bin/data/config.json.tmp
+bin/data/logs/
+
+# MSVC linker by-products that sit next to the exe
+bin/*.exp
+bin/*.lib

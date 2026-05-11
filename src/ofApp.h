@@ -25,6 +25,27 @@ static constexpr uint8_t SERIAL_NIGHT_ON    = 6;
 static constexpr uint8_t SERIAL_SPEED_BASE  = 7;    // speed byte = raw - base
 static constexpr int     SERIAL_SPEED_RANGE = 240;  // 0..240 maps to the speed output range
 
+// Force data + metadata of `path` past the OS page cache onto physical media.
+// Returns true on success. No-op on non-Windows builds (this app is kiosk-on-Windows).
+static bool fsyncFile(const std::filesystem::path & path) {
+#ifdef _WIN32
+    HANDLE h = CreateFileW(path.wstring().c_str(),
+                           GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        ofLogError("fsyncFile") << "CreateFile failed: " << GetLastError();
+        return false;
+    }
+    bool ok = FlushFileBuffers(h) != 0;
+    if (!ok) ofLogError("fsyncFile") << "FlushFileBuffers failed: " << GetLastError();
+    CloseHandle(h);
+    return ok;
+#else
+    (void)path;
+    return true;
+#endif
+}
+
 enum VideoMode {
     ORIGINAL,
     FIT_SCREEN,
@@ -66,10 +87,8 @@ public:
     float lastTime = 0.0f;
     float lastSaveTime = 0.0f;
     bool configDirty = false;
-    // True iff the on-disk config.json was last seen in a valid state — either
-    // loaded successfully at startup or written successfully by saveConfig().
-    // When false, saveConfig skips the rotate-to-.bak step so a corrupted
-    // config.json cannot clobber the last known-good .bak.
+    // False until we either load a good config or write one. Gates the
+    // rotate-to-.bak step in saveConfig() — see comment there.
     bool currentConfigIsValid = false;
 
     // simulated-serial input (keyboard + GUI slider, bypasses real serial)
@@ -171,7 +190,6 @@ void ofApp::update() {
     if (configDirty && currentTime - lastSaveTime >= 5.0f) {
         saveConfig();
         lastSaveTime = currentTime;
-        configDirty = false;
     }
 
     if (speedScale  != guiSpeedScale.get())                    { speedScale  = guiSpeedScale;                          configDirty = true; }
@@ -241,8 +259,7 @@ void ofApp::draw() {
 
 void ofApp::keyPressed(int key) {
     if (key == OF_KEY_ESC) {
-        saveConfig();
-        ofExit();
+        ofExit();  // routes through ofApp::exit() which saves if dirty
     } else if (key == 'g' || key == 'G') {
         guiVisible = !guiVisible;
         if (guiVisible) ofShowCursor();
@@ -319,31 +336,26 @@ void ofApp::processByte(uint8_t byte) {
 
 void ofApp::loadConfig() {
     // Try config.json, then config.json.bak (last known-good after a torn
-    // save), then defaults. ofLoadJson on a 0-byte / missing file returns
-    // an empty/null ofJson without throwing, so we treat both as a miss.
+    // save), then defaults. ofLoadJson swallows missing-file and parse
+    // failures internally and returns an empty json, so a null/empty result
+    // is the only signal we need to fall through.
     auto tryLoad = [](const std::string & relPath, ofJson & out) -> bool {
-        try {
-            ofJson j = ofLoadJson(relPath);
-            if (j.is_null() || j.empty()) return false;
-            out = j;
-            return true;
-        } catch (const std::exception &) {
-            return false;
-        }
+        ofJson j = ofLoadJson(relPath);
+        if (j.is_null() || j.empty()) return false;
+        out = j;
+        return true;
     };
 
     ofJson config;
     if (tryLoad("config.json", config)) {
         currentConfigIsValid = true;
+    } else if (tryLoad("config.json.bak", config)) {
+        currentConfigIsValid = false;
+        ofLogNotice("loadConfig") << "recovered values from config.json.bak";
     } else {
         currentConfigIsValid = false;
-        ofLogWarning("loadConfig") << "config.json missing or unreadable, trying config.json.bak";
-        if (!tryLoad("config.json.bak", config)) {
-            ofLogError("loadConfig") << "no usable config; falling back to defaults";
-            config = ofJson::object();
-        } else {
-            ofLogNotice("loadConfig") << "recovered values from config.json.bak";
-        }
+        ofLogError("loadConfig") << "no usable config; falling back to defaults";
+        config = ofJson::object();
     }
 
     if (config.contains("videoFiles") && config["videoFiles"].is_array()) {
@@ -391,47 +403,34 @@ void ofApp::saveConfig() {
 
     // Durable save: write .tmp, force its contents to physical disk, rotate
     // the current config.json to .bak, then rename the tmp onto config.json.
-    //
-    //   ofSaveJson(tmp)  → bytes hit the OS page cache, file is closed
-    //   FlushFileBuffers → those bytes are forced past the page cache and the
-    //                      NTFS journal onto physical media. Without this,
-    //                      std::filesystem::rename is metadata-atomic but a
-    //                      power loss can leave config.json pointing at an
-    //                      unwritten data extent (= a 0-byte file on reboot).
-    //   rename → .bak    → keeps last good copy as a fallback for load.
-    //   rename tmp → cfg → directory entry flip is metadata-atomic.
+    // FlushFileBuffers is the load-bearing call — without it, rename is
+    // metadata-atomic but a power loss can leave config.json pointing at an
+    // unwritten data extent (a 0-byte file on reboot).
     const std::filesystem::path finalPath = ofToDataPath("config.json", true);
-    const std::filesystem::path tmpPath   = finalPath.string() + ".tmp";
-    const std::filesystem::path bakPath   = finalPath.string() + ".bak";
+    std::filesystem::path tmpPath = finalPath; tmpPath += ".tmp";
+    std::filesystem::path bakPath = finalPath; bakPath += ".bak";
 
     if (!ofSaveJson(tmpPath.string(), config)) {
         ofLogError("saveConfig") << "failed to write " << tmpPath;
         return;
     }
-
-#ifdef _WIN32
-    HANDLE h = CreateFileW(tmpPath.wstring().c_str(),
-                           GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) {
-        ofLogError("saveConfig") << "CreateFile on tmp failed: " << GetLastError();
-    } else {
-        if (!FlushFileBuffers(h)) {
-            ofLogError("saveConfig") << "FlushFileBuffers failed: " << GetLastError();
-        }
-        CloseHandle(h);
+    if (!fsyncFile(tmpPath)) {
+        // Don't trade durability for a save that fails again 5s later. Leave
+        // the prior good config.json untouched and try again next tick.
+        std::error_code rmEc;
+        std::filesystem::remove(tmpPath, rmEc);
+        return;
     }
-#endif
 
     std::error_code ec;
-    // Only rotate to .bak if the existing config.json is known good. Skipping
-    // this when currentConfigIsValid == false prevents a corrupted file (e.g.
-    // a 0-byte config.json from a previous torn write) from overwriting the
+    // Only rotate to .bak if the existing config.json is known good — a
+    // corrupted file from a previous torn write must not overwrite the
     // last known-good .bak we just recovered from.
-    if (currentConfigIsValid && std::filesystem::exists(finalPath, ec)) {
-        ec.clear();
+    if (currentConfigIsValid) {
         std::filesystem::rename(finalPath, bakPath, ec);
-        if (ec) ofLogError("saveConfig") << "rotate to .bak failed: " << ec.message();
+        if (ec && ec != std::errc::no_such_file_or_directory) {
+            ofLogError("saveConfig") << "rotate to .bak failed: " << ec.message();
+        }
         ec.clear();
     }
 
@@ -442,10 +441,11 @@ void ofApp::saveConfig() {
         return;
     }
     currentConfigIsValid = true;
+    configDirty = false;
 }
 
 void ofApp::exit() {
-    saveConfig();
+    if (configDirty) saveConfig();
 }
 
 VideoMode ofApp::stringToVideoMode(const std::string& modeStr) {
